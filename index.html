@@ -659,6 +659,9 @@
             <i class="fas fa-headphones" style="font-size: 3.5rem; color: var(--accent);"></i>
             <div style="font-size: 1.3rem; font-weight: 600;">Audio stream rádia</div>
             <audio controls autoplay crossorigin="anonymous" referrerpolicy="no-referrer"></audio>
+            <div id="audio-error-msg" style="display:none; color:#ff6b6b; font-size:1.2rem; margin-top:10px;">
+                <i class="fas fa-exclamation-triangle"></i> Stream není momentálně dostupný
+            </div>
         </div>
     </div>
 
@@ -812,7 +815,6 @@
             }
             if (shakaPlayer) {
                 try { await shakaPlayer.unload(); } catch(e) {}
-                try { await shakaPlayer.detach(); } catch(e) {}
             }
             videoElem.pause();
             videoElem.removeAttribute('src');
@@ -821,7 +823,16 @@
         }
 
         async function initShakaOnce() {
-            if (shakaPlayer) return shakaPlayer;
+            if (shakaPlayer) {
+                try {
+                    if (!shakaPlayer.getMediaElement()) {
+                        await shakaPlayer.attach(videoElem);
+                    }
+                } catch (e) {
+                    console.warn('[Sport TV] Re-attaching Shaka failed:', e);
+                }
+                return shakaPlayer;
+            }
             if (!shaka.Player.isBrowserSupported()) {
                 console.warn('Shaka is not supported in this environment');
                 return null;
@@ -911,19 +922,25 @@
             showControls();
             document.body.style.overflow = 'hidden';
 
+            // UI reset
+            videoElem.style.display = '';
+            shakaContainer.style.display = 'block';
+            audioFallbackDiv.style.display = 'none';
+            var audioErrEl = document.getElementById('audio-error-msg');
+            if (audioErrEl) audioErrEl.style.display = 'none';
+
             if (currentAudioElement) {
                 currentAudioElement.pause();
                 currentAudioElement.removeAttribute('src');
                 currentAudioElement.load();
                 currentAudioElement = null;
             }
-            audioFallbackDiv.style.display = 'none';
-            shakaContainer.style.display = 'block';
 
             await unloadPlayer();
             if (loadId !== currentLoadId) return;
 
             var isRadio = channel.name.toLowerCase().includes('radio') || channel.name.toLowerCase().includes('fm');
+            var cleanUrl = '';
 
             try {
                 // Fetch stream URL pointer
@@ -940,7 +957,7 @@
                 if (isRadio) throw new Error('audio_fallback');
 
                 // Sanitize URL
-                var cleanUrl = streamUrl.replace(/([?&])(cf_clearance|clearance)=[^&]*/g, '').replace(/\?&/, '?').replace(/&&+/, '&').replace(/[?&]$/, '');
+                cleanUrl = streamUrl.replace(/([?&])(cf_clearance|clearance)=[^&]*/g, '').replace(/\?&/, '?').replace(/&&+/, '&').replace(/[?&]$/, '');
 
                 // Priority 1: Hardware Samsung AVPlay
                 if (typeof TizenAVPlay !== 'undefined' && TizenAVPlay.isAvailable()) {
@@ -959,13 +976,17 @@
                             try { TizenAVPlay.stop(); } catch(e){}
                             videoElem.style.display = '';
                             playerEngineLabel.textContent = 'Shaka Player';
-                            initShakaOnce().then(function(sp) {
+                            initShakaOnce().then(async function(sp) {
                                 if (sp) {
-                                    sp.load(cleanUrl).then(function() {
-                                        videoElem.play().catch(function() {});
-                                    }).catch(function(sErr) {
+                                    try {
+                                        if (!sp.getMediaElement()) {
+                                            await sp.attach(videoElem);
+                                        }
+                                        await sp.load(cleanUrl);
+                                        await videoElem.play().catch(function() {});
+                                    } catch (sErr) {
                                         console.error('Shaka fallback also failed:', sErr);
-                                    });
+                                    }
                                 }
                             });
                         }
@@ -978,6 +999,10 @@
                 videoElem.style.display = '';
                 await initShakaOnce();
                 if (loadId !== currentLoadId) return;
+
+                if (!shakaPlayer.getMediaElement()) {
+                    await shakaPlayer.attach(videoElem);
+                }
 
                 console.log('[Sport TV] Loading into Shaka Player:', cleanUrl);
                 await shakaPlayer.load(cleanUrl);
@@ -995,14 +1020,32 @@
                 console.warn('[Sport TV] Video playback fallback triggered:', err);
                 if (loadId !== currentLoadId) return;
 
+                // Native video failover before falling back to radio
+                if (!isRadio && cleanUrl) {
+                    try {
+                        console.log('[Sport TV] Attempting native video failover:', cleanUrl);
+                        await unloadPlayer();
+                        var playUrl = (window.__wrapWithProxy && window.__TB_PROXY_ACTIVE__) ? window.__wrapWithProxy(cleanUrl) : cleanUrl;
+                        videoElem.style.display = '';
+                        videoElem.src = playUrl;
+                        videoElem.load();
+                        await videoElem.play();
+                        return;
+                    } catch (nativeErr) {
+                        console.warn('[Sport TV] Native video failover failed:', nativeErr);
+                    }
+                }
+
                 // Audio stream fallback (e.g. ČRo Radiožurnál Sport)
                 shakaContainer.style.display = 'none';
                 audioFallbackDiv.style.display = 'flex';
                 playerEngineLabel.textContent = 'Audio Stream';
 
                 var audioElem = audioFallbackDiv.querySelector('audio');
-                audioElem.removeAttribute('src');
-                audioElem.load();
+                if (audioElem) {
+                    audioElem.removeAttribute('src');
+                    audioElem.load();
+                }
 
                 try {
                     var aRes = await fetch('https://e.yasuoyone.org/api/get-stream?id=' + encodeURIComponent(channel.name));
@@ -1012,15 +1055,18 @@
                         var aStreamRes = await fetch('https://e.yasuoyone.org' + aData.stream);
                         if (loadId !== currentLoadId) return;
                         var audioUrl = (await aStreamRes.text()).trim();
-                        audioElem.src = audioUrl;
-                        currentAudioElement = audioElem;
-                        await audioElem.play();
+                        if (audioElem) {
+                            audioElem.src = audioUrl;
+                            currentAudioElement = audioElem;
+                            await audioElem.play();
+                        }
                     } else {
                         throw new Error('No audio link');
                     }
                 } catch (audioErr) {
                     if (loadId !== currentLoadId) return;
-                    audioFallbackDiv.innerHTML = '<div style="color:#ff6b6b; font-size:1.2rem;"><i class="fas fa-exclamation-triangle"></i> Stream není momentálně dostupný</div>';
+                    var errEl = document.getElementById('audio-error-msg');
+                    if (errEl) errEl.style.display = 'block';
                 }
             }
         }
@@ -1044,8 +1090,11 @@
             }
 
             await unloadPlayer();
-            audioFallbackDiv.style.display = 'none';
+            videoElem.style.display = '';
             shakaContainer.style.display = 'block';
+            audioFallbackDiv.style.display = 'none';
+            var audioErrEl = document.getElementById('audio-error-msg');
+            if (audioErrEl) audioErrEl.style.display = 'none';
             currentChannelObj = null;
 
             // Restore focus to last active card
