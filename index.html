@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="referrer" content="no-referrer">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#000000">
+    <title>Sport TV</title>
+
+    <!-- Tizen & TV Integration Scripts -->
+    <script src="tizen-adapter.js"></script>
+    <script src="tizen-avplay.js"></script>
+
+    <!-- App Icon & Fonts -->
+    <link rel="icon" type="image/svg+xml" href="icon.svg">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Bebas+Neue&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/shaka-player/dist/controls.min.css">
+
+    <!-- Referrer & Header Policy Patcher -->
+    <script>
+    (function() {
+      if (typeof window.fetch === "function" && !window.fetch._cetinPatched) {
+        var origFetch = window.fetch;
+        window.fetch = function(input, init) {
+          var url = typeof input === "string" ? input : (input && input.url ? input.url : "");
+          init = init || {};
+          var lowerUrl = typeof url === "string" ? url.toLowerCase() : "";
+          var isYasuoyone = lowerUrl.includes(".yasuoyone.org") || lowerUrl.includes("yasuoyone.org");
+          if (isYasuoyone) {
+            init.headers = init.headers || {};
+            if (typeof Headers !== "undefined" && init.headers instanceof Headers) {
+              init.headers.set("Origin", "https://yasuoyone.org");
+              init.headers.set("Referer", "https://yasuoyone.org/");
+            } else if (Array.isArray(init.headers)) {
+              init.headers = init.headers.filter(function(h) { return !/^(origin|referer|referrer)$/i.test(h[0]); });
+              init.headers.push(["Origin", "https://yasuoyone.org"]);
+              init.headers.push(["Referer", "https://yasuoyone.org/"]);
+            } else {
+              init.headers["Origin"] = "https://yasuoyone.org";
+              init.headers["Referer"] = "https://yasuoyone.org/";
+            }
+          } else if (lowerUrl.includes("cetin.cz") || lowerUrl.includes("mazana.tv") || lowerUrl.includes("aw-ucdn")) {
+            init.referrerPolicy = "no-referrer";
+            init.referrer = "";
+            if (init.headers) {
+              if (typeof Headers !== "undefined" && init.headers instanceof Headers) {
+                init.headers.delete("Referer");
+                init.headers.delete("referer");
+                init.headers.delete("Referrer");
+                init.headers.delete("referrer");
+                init.headers.delete("Origin");
+                init.headers.delete("origin");
+              } else if (Array.isArray(init.headers)) {
+                init.headers = init.headers.filter(function(h) { return !/^(referer|referrer|origin)$/i.test(h[0]); });
+              } else {
+                delete init.headers["Referer"];
+                delete init.headers["referer"];
+                delete init.headers["Referrer"];
+                delete init.headers["referrer"];
+                delete init.headers["Origin"];
+                delete init.headers["origin"];
+              }
+            }
+          }
+          if (!init.mode && typeof url === "string" && /^https?:\/\//i.test(url) && !url.includes(location.hostname)) {
+            init.mode = "cors";
+          }
+          if (typeof input !== "string" && input && input.url) {
+            try {
+              input = new Request(input, { referrerPolicy: "no-referrer", referrer: "" });
+            } catch (e) {}
+          }
+          return origFetch.call(this, input, init);
+        };
+        window.fetch._cetinPatched = true;
+      }
+      if (typeof XMLHttpRequest !== "undefined" && XMLHttpRequest.prototype && !XMLHttpRequest.prototype._cetinPatched) {
+        var origOpen = XMLHttpRequest.prototype.open;
+        XMLHttpRequest.prototype.open = function(method, url) {
+          try { this.referrerPolicy = "no-referrer"; } catch (e) {}
+          return origOpen.apply(this, arguments);
+        };
+        XMLHttpRequest.prototype._cetinPatched = true;
+      }
+    })();
+    </script>
+
+    <!-- Shaka Player and Mux Engine -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mux.js/7.1.0/mux.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/shaka-player/dist/shaka-player.ui.min.js"></script>
+    <script>if(typeof shaka !== 'undefined' && shaka.polyfill) shaka.polyfill.installAll();</script>
+    <script>
+    (function(){
+      if (typeof shaka !== 'undefined' && shaka.Player && !shaka.Player._patched) {
+        var oC = shaka.Player.prototype.configure;
+        shaka.Player.prototype.configure = function(c, v) {
+          if (typeof c === 'object') {
+            if (c.preferredAudioLanguage === undefined || c.preferredAudioLanguage === "" || c.preferredAudioLanguage === "en" || c.preferredAudioLanguage === "eng") {
+              c.preferredAudioLanguage = 'cs';
+            }
+          } else if (typeof c === 'string' && c === 'preferredAudioLanguage') {
+            if (!v || v === 'en' || v === 'eng') v = 'cs';
+          }
+          return oC.call(this, c, v);
+        };
+        var oL = shaka.Player.prototype.load;
+        shaka.Player.prototype.load = function(url, startTime, mimeType) {
+          var assetUri = (typeof url === 'string' ? url : (this.getAssetUri ? this.getAssetUri() : '')) || '';
+          if (assetUri && typeof assetUri === 'string') {
+            var lowerUrl = assetUri.toLowerCase();
+            if (lowerUrl.includes('.m3u8s')) {
+              mimeType = 'application/x-mpegurl';
+            } else if (lowerUrl.includes('.txt')) {
+              if (lowerUrl.includes('master') || lowerUrl.includes('m3u8')) {
+                mimeType = 'application/x-mpegurl';
+              } else if (lowerUrl.includes('mpd')) {
+                mimeType = 'application/dash+xml';
+              } else {
+                mimeType = 'application/x-mpegurl';
+              }
+            }
+          }
+          return oL.call(this, url, startTime, mimeType);
+        };
+        shaka.Player._patched = true;
+      }
+    })();
+    </script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        :root {
+            --bg-deep: #06080e;
+            --bg-surface: #0e121a;
+            --bg-elevated: #161c28;
+            --bg-card: #141822;
+            --text-primary: #ffffff;
+            --text-secondary: #9aa5b8;
+            --text-muted: #606d82;
+            --accent: #FFC629;
+            --accent-soft: rgba(255, 198, 41, 0.15);
+            --accent-glow: rgba(255, 198, 41, 0.4);
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-gold: rgba(255, 198, 41, 0.5);
+            --radius-md: 14px;
+            --radius-sm: 8px;
+            --transition: all 0.2s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-deep);
+            color: var(--text-primary);
+            line-height: 1.5;
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+
+        .bg-aura {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: -1;
+            background: radial-gradient(circle at 15% 20%, rgba(255, 198, 41, 0.05) 0%, transparent 55%),
+                        radial-gradient(circle at 85% 80%, rgba(30, 80, 200, 0.04) 0%, transparent 60%);
+        }
+
+        .app-container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 2.2rem 2.8rem 5rem;
+        }
+
+        /* ── Header ─────────────────────────────────────────── */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            margin-bottom: 2.2rem;
+            padding-bottom: 1.2rem;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .logo-area {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .logo-icon {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #FFC629 0%, #FFA500 100%);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.6rem;
+            color: #000;
+            box-shadow: 0 4px 16px rgba(255, 198, 41, 0.35);
+        }
+
+        .logo-titles {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .logo-text {
+            font-family: 'Bebas Neue', cursive;
+            font-size: 2.2rem;
+            letter-spacing: 2px;
+            line-height: 1;
+            background: linear-gradient(135deg, #FFC629, #FFF);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .logo-subtitle {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+        }
+
+        .header-info {
+            display: flex;
+            align-items: center;
+            gap: 1.2rem;
+        }
+
+        .channel-counter {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            padding: 0.5rem 1.1rem;
+            border-radius: 30px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .channel-counter i {
+            color: var(--accent);
+        }
+
+        .remote-tip {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-subtle);
+            padding: 0.5rem 1rem;
+            border-radius: 30px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .remote-tip i {
+            color: #FFC629;
+        }
+
+        .search-box {
+            position: relative;
+            width: 260px;
+        }
+
+        .search-box i {
+            position: absolute;
+            left: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            pointer-events: none;
+        }
+
+        #channel-search {
+            width: 100%;
+            padding: 0.65rem 1rem 0.65rem 2.5rem;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 30px;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            outline: none;
+            transition: var(--transition);
+        }
+
+        #channel-search:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 16px var(--accent-glow);
+        }
+
+        /* ── Channels Grid ───────────────────────────────────── */
+        .channels-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+            gap: 1.6rem;
+            margin: 1.5rem 0 3rem;
+        }
+
+        .channel-card {
+            background: var(--bg-card);
+            border-radius: var(--radius-md);
+            aspect-ratio: 16 / 9.5;
+            position: relative;
+            overflow: hidden;
+            cursor: pointer;
+            border: 2px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+            outline: none;
+        }
+
+        .channel-card .channel-logo {
+            max-width: 82%;
+            max-height: 72%;
+            object-fit: contain;
+            filter: brightness(0.95) drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
+            transition: var(--transition);
+        }
+
+        .channel-card .channel-name {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(0deg, rgba(6, 8, 14, 0.95) 0%, rgba(6, 8, 14, 0.7) 60%, transparent 100%);
+            padding: 0.9rem 0.6rem 0.5rem;
+            text-align: center;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: #ffffff;
+            transform: translateY(100%);
+            transition: transform 0.2s ease;
+            pointer-events: none;
+            letter-spacing: 0.3px;
+        }
+
+        /* Hover & Focus (TV Spatial Navigation) */
+        .channel-card:hover {
+            transform: translateY(-4px) scale(1.03);
+            border-color: var(--accent);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7), 0 0 14px var(--accent-soft);
+        }
+
+        .channel-card:hover .channel-name {
+            transform: translateY(0);
+        }
+
+        .channel-card:hover .channel-logo {
+            filter: brightness(1.1) drop-shadow(0 6px 12px rgba(0,0,0,0.7));
+            transform: scale(1.04);
+        }
+
+        .channel-card:focus,
+        .channel-card:focus-visible {
+            outline: none !important;
+            border-color: #FFC629 !important;
+            box-shadow: 0 0 32px rgba(255, 198, 41, 0.85), 0 0 0 3px #FFC629 !important;
+            transform: translateY(-5px) scale(1.07) !important;
+            z-index: 50 !important;
+        }
+
+        .channel-card:focus .channel-name,
+        .channel-card:focus-visible .channel-name {
+            transform: translateY(0) !important;
+            background: linear-gradient(0deg, rgba(255, 198, 41, 0.95) 0%, rgba(255, 198, 41, 0.85) 60%, transparent 100%);
+            color: #000000 !important;
+            font-weight: 700;
+        }
+
+        .channel-card:focus .channel-logo,
+        .channel-card:focus-visible .channel-logo {
+            filter: brightness(1.15) !important;
+            transform: scale(1.06) !important;
+        }
+
+        .empty-state {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 5rem 1rem;
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        .empty-state i {
+            font-size: 3.5rem;
+            margin-bottom: 1.2rem;
+            display: block;
+            color: var(--accent);
+        }
+
+        /* ── Fullscreen Video Player Overlay ─────────────────── */
+        .player-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #000000;
+            z-index: 99999;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .player-overlay.active {
+            display: flex !important;
+        }
+
+        .player-overlay.controls-hidden {
+            cursor: none;
+        }
+
+        .player-header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            padding: 1.4rem 2.2rem;
+            background: linear-gradient(180deg, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.4) 60%, transparent 100%);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+        }
+
+        .player-overlay.controls-hidden .player-header {
+            transform: translateY(-100%);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .player-header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .close-player {
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            font-size: 1.3rem;
+            cursor: pointer;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+            outline: none;
+        }
+
+        .close-player:hover,
+        .close-player:focus,
+        .close-player:focus-visible {
+            background: #ff3b3b !important;
+            border-color: #ff3b3b !important;
+            box-shadow: 0 0 25px rgba(255, 59, 59, 0.9) !important;
+            transform: scale(1.15) !important;
+        }
+
+        .player-channel-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            background: rgba(255, 198, 41, 0.15);
+            padding: 0.45rem 1.2rem;
+            border-radius: 40px;
+            border-left: 3px solid var(--accent);
+            color: #ffffff;
+            letter-spacing: 0.5px;
+        }
+
+        .player-hw-badge {
+            background: rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(255, 198, 41, 0.4);
+            padding: 0.4rem 1rem;
+            border-radius: 30px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #FFC629;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .live-dot {
+            width: 9px;
+            height: 9px;
+            background: #ff3b3b;
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 10px #ff3b3b;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.85); }
+        }
+
+        /* Video element & Shaka player container */
+        .video-container,
+        .shaka-video-container {
+            width: 100vw !important;
+            height: 100vh !important;
+            flex: 1 !important;
+            position: relative !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            background: #000000 !important;
+            overflow: hidden !important;
+        }
+
+        #video,
+        video,
+        .shaka-video-container video {
+            display: block !important;
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: contain !important;
+            background: #000000 !important;
+            transform: translateZ(0) !important;
+            -webkit-transform: translateZ(0) !important;
+            outline: none !important;
+        }
+
+        .audio-fallback {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 1.5rem;
+            text-align: center;
+            padding: 3rem;
+            width: 100%;
+            height: 100%;
+        }
+
+        .audio-fallback audio {
+            width: 80%;
+            max-width: 600px;
+        }
+
+        /* Shaka Controls focus indicators for TV remote */
+        .shaka-controls-container button:focus,
+        .shaka-controls-container button:focus-visible,
+        .shaka-overflow-menu button:focus,
+        .shaka-settings-menu button:focus {
+            outline: none !important;
+            background: rgba(255, 198, 41, 0.4) !important;
+            color: #FFC629 !important;
+            box-shadow: 0 0 18px rgba(255, 198, 41, 0.85) !important;
+            transform: scale(1.15) !important;
+        }
+
+        .shaka-big-buttons-container,
+        .shaka-play-button-container,
+        .shaka-play-button,
+        .shaka-video-container.pip-placeholder {
+            display: none !important;
+        }
+
+        .material-icons-round,
+        .shaka-fullscreen-button {
+            font-family: 'Material Icons Round' !important;
+            font-style: normal;
+            font-weight: normal;
+        }
+
+        @media (max-width: 900px) {
+            .app-container { padding: 1.2rem 1.4rem 3rem; }
+            .header { flex-direction: column; align-items: stretch; gap: 1rem; }
+            .channels-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1rem; }
+            .search-box { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-aura"></div>
+
+    <main class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo-area">
+                <div class="logo-icon">
+                    <i class="fas fa-trophy"></i>
+                </div>
+                <div class="logo-titles">
+                    <div class="logo-text">SPORT TV</div>
+                    <div class="logo-subtitle">Živé sportovní přenosy</div>
+                </div>
+            </div>
+
+            <div class="header-info">
+                <div class="channel-counter" id="channel-counter">
+                    <i class="fas fa-satellite-dish"></i>
+                    <span id="channel-count-text">44 sportovních kanálů</span>
+                </div>
+                <div class="remote-tip">
+                    <i class="fas fa-gamepad"></i>
+                    <span>Šipky + OK • Zpět pro ukončení</span>
+                </div>
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="channel-search" placeholder="Hledat kanál..." autocomplete="off">
+                </div>
+            </div>
+        </header>
+
+        <!-- Channels Grid -->
+        <div class="channels-grid" id="channels-grid"></div>
+    </main>
+
+    <!-- Fullscreen Video Player Overlay -->
+    <div id="player-overlay" class="player-overlay" role="dialog" aria-modal="true">
+        <div class="player-header">
+            <div class="player-header-left">
+                <button class="close-player" id="close-player-btn" tabindex="0" title="Zpět na seznam kanálů">
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+                <div class="player-channel-title" id="player-channel-name">Načítání streamu...</div>
+            </div>
+            <div class="player-hw-badge" id="player-hw-badge">
+                <span class="live-dot"></span> LIVE &nbsp;<span id="player-engine-label">Samsung AVPlay</span>
+            </div>
+        </div>
+
+        <div class="video-container" data-shaka-player-container id="shaka-container">
+            <video id="video" data-shaka-player autoplay playsinline webkit-playsinline referrerpolicy="no-referrer"></video>
+        </div>
+
+        <div id="audio-fallback" class="audio-fallback">
+            <i class="fas fa-headphones" style="font-size: 3.5rem; color: var(--accent);"></i>
+            <div style="font-size: 1.3rem; font-weight: 600;">Audio stream rádia</div>
+            <audio controls autoplay crossorigin="anonymous" referrerpolicy="no-referrer"></audio>
+        </div>
+    </div>
+
+    <!-- Core App Logic -->
+    <script>
+    (function initSportApp() {
+        'use strict';
+
+        // ── 1. Embedded Initial Sport Channels (Instant 0 ms Render) ─────────
+        var INITIAL_SPORT_CHANNELS = [
+            {"id":1001,"name":"Oneplay Sport 1","icon":"https://opg.yasuoyone.org/icons/Oneplay_Sport_1.png"},
+            {"id":1002,"name":"Oneplay Sport 2","icon":"https://opg.yasuoyone.org/icons/Oneplay_Sport_2.png"},
+            {"id":1003,"name":"Oneplay Sport 3","icon":"https://opg.yasuoyone.org/icons/Oneplay_Sport_3.png"},
+            {"id":1004,"name":"Oneplay Sport 4","icon":"https://opg.yasuoyone.org/icons/Oneplay_Sport_4.png"},
+            {"id":1005,"name":"Oneplay Sport MD2","icon":"https://opg.yasuoyone.org/icons/Oneplay_Sport_MD2.png"},
+            {"id":1006,"name":"Oneplay Sport MD3","icon":"https://opg.yasuoyone.org/icons/Oneplay_Sport_MD3.png"},
+            {"id":1007,"name":"Oneplay Sport MD4","icon":"https://opg.yasuoyone.org/icons/Oneplay_Sport_MD4.png"},
+            {"id":1008,"name":"Oneplay Sport MD5","icon":"https://opg.yasuoyone.org/icons/Oneplay_Sport_MD5.png"},
+            {"id":1009,"name":"Oneplay Sport MD6","icon":"https://opg.yasuoyone.org/icons/Oneplay_Sport_MD6.png"},
+            {"id":1010,"name":"Oneplay Sport MD7","icon":"https://opg.yasuoyone.org/icons/Oneplay_Sport_MD7.png"},
+            {"id":1011,"name":"Oneplay Sport MD8","icon":"https://opg.yasuoyone.org/icons/Oneplay_Sport_MD8.png"},
+            {"id":1012,"name":"Nova Sport 1 HD","icon":"https://opg.yasuoyone.org/icons/Nova_Sport_1_HD.png"},
+            {"id":1013,"name":"Nova Sport 2 HD","icon":"https://opg.yasuoyone.org/icons/Nova_Sport_2_HD.png"},
+            {"id":1014,"name":"Nova Sport 3 HD","icon":"https://opg.yasuoyone.org/icons/Nova_Sport_3_HD.png"},
+            {"id":1015,"name":"Nova Sport 4 HD","icon":"https://opg.yasuoyone.org/icons/Nova_Sport_4_HD.png"},
+            {"id":1016,"name":"Nova Sport 5 HD","icon":"https://opg.yasuoyone.org/icons/Nova_Sport_5_HD.png"},
+            {"id":1017,"name":"Nova Sport 6 HD","icon":"https://opg.yasuoyone.org/icons/Nova_Sport_6_HD.png"},
+            {"id":1018,"name":"Premier Sport 1 HD","icon":"https://opg.yasuoyone.org/icons/Premier_Sport_1_HD.png"},
+            {"id":1019,"name":"Premier Sport 2 HD","icon":"https://opg.yasuoyone.org/icons/Premier_Sport_2_HD.png"},
+            {"id":1020,"name":"Premier Sport 3 HD","icon":"https://opg.yasuoyone.org/icons/Premier_Sport_3_HD.png"},
+            {"id":1021,"name":"ČT Sport HD","icon":"https://opg.yasuoyone.org/icons/CT_Sport_HD.png"},
+            {"id":1022,"name":"ČT Sport HD AD","icon":"https://opg.yasuoyone.org/icons/CT_Sport_HD_AD.png"},
+            {"id":1023,"name":"Eurosport 1 HD","icon":"https://opg.yasuoyone.org/icons/Eurosport_1_HD.png"},
+            {"id":1024,"name":"Eurosport 2 HD","icon":"https://opg.yasuoyone.org/icons/Eurosport_2_HD.png"},
+            {"id":1025,"name":"CANAL+ Sport HD","icon":"https://opg.yasuoyone.org/icons/CANAL+_Sport_HD.png"},
+            {"id":1026,"name":"CANAL+ Sport 2 HD","icon":"https://opg.yasuoyone.org/icons/CANAL+_Sport_2_HD.png"},
+            {"id":1027,"name":"CANAL+ Sport 3 HD","icon":"https://opg.yasuoyone.org/icons/CANAL+_Sport_3_HD.png"},
+            {"id":1028,"name":"CANAL+ Sport 4 HD","icon":"https://opg.yasuoyone.org/icons/CANAL+_Sport_4_HD.png"},
+            {"id":1029,"name":"CANAL+ Sport 5 HD","icon":"https://opg.yasuoyone.org/icons/CANAL+_Sport_5_HD.png"},
+            {"id":1030,"name":"CANAL+ Sport 6 HD","icon":"https://opg.yasuoyone.org/icons/CANAL+_Sport_6_HD.png"},
+            {"id":1031,"name":"CANAL+ Sport 7 HD","icon":"https://opg.yasuoyone.org/icons/CANAL+_Sport_7_HD.png"},
+            {"id":1032,"name":"CANAL+ Sport 8 HD","icon":"https://opg.yasuoyone.org/icons/CANAL+_Sport_8_HD.png"},
+            {"id":1033,"name":"Prima Sport","icon":"https://opg.yasuoyone.org/icons/Prima_Sport.png"},
+            {"id":1034,"name":"Golf Channel HD","icon":"https://opg.yasuoyone.org/icons/Golf_Channel_HD.png"},
+            {"id":1035,"name":"Sport 1","icon":"https://opg.yasuoyone.org/icons/Sport_1.png"},
+            {"id":1036,"name":"Sport 2","icon":"https://opg.yasuoyone.org/icons/Sport_2.png"},
+            {"id":1037,"name":"FightBox HD","icon":"https://opg.yasuoyone.org/icons/FightBox_HD.png"},
+            {"id":1038,"name":"Auto motor sport HD","icon":"https://opg.yasuoyone.org/icons/Auto_motor_sport_HD.png"},
+            {"id":1039,"name":"Arena Sport 1 HD","icon":"https://opg.yasuoyone.org/icons/Arena_Sport_1_HD.png"},
+            {"id":1040,"name":"Arena Sport 2 HD","icon":"https://opg.yasuoyone.org/icons/Arena_Sport_2_HD.png"},
+            {"id":1041,"name":"Sporty TV","icon":"https://opg.yasuoyone.org/icons/Sporty_TV.png"},
+            {"id":1042,"name":"JOJ Šport HD","icon":"https://opg.yasuoyone.org/icons/JOJ_Sport_HD.png"},
+            {"id":1043,"name":"RTVS Šport HD","icon":"https://opg.yasuoyone.org/icons/RTVS_Sport_HD.png"},
+            {"id":1044,"name":"ČRo Radiožurnál Sport","icon":"https://opg.yasuoyone.org/icons/CRo_Radiozurnal_Sport.png"}
+        ];
+
+        // ── 2. DOM Elements ──────────────────────────────────────────────────
+        var grid = document.getElementById('channels-grid');
+        var searchInput = document.getElementById('channel-search');
+        var channelCountText = document.getElementById('channel-count-text');
+        var playerOverlay = document.getElementById('player-overlay');
+        var closePlayerBtn = document.getElementById('close-player-btn');
+        var playerChannelNameSpan = document.getElementById('player-channel-name');
+        var playerEngineLabel = document.getElementById('player-engine-label');
+        var videoElem = document.getElementById('video');
+        var shakaContainer = document.getElementById('shaka-container');
+        var audioFallbackDiv = document.getElementById('audio-fallback');
+
+        // State
+        var sportChannels = INITIAL_SPORT_CHANNELS.slice();
+        var searchTerm = '';
+        var shakaPlayer = null;
+        var shakaControls = null;
+        var currentAudioElement = null;
+        var currentChannelObj = null;
+        var currentLoadId = 0;
+        var lastActiveCard = null;
+        var controlsTimeout = null;
+
+        // ── 3. Categorization Helper ─────────────────────────────────────────
+        function isSportChannel(channelName) {
+            if (!channelName) return false;
+            if (typeof window.asC === 'function') {
+                var cat = window.asC(channelName);
+                if (cat === 'Sport' || cat === 'Sportovní') return true;
+            }
+            var s = channelName.toLowerCase();
+            return s.includes('sport') || s.includes('eurosport') || s.includes('arena') ||
+                   s.includes('fightbox') || s.includes('golf') || s.includes('canal+') ||
+                   s.includes('premier') || s.includes('nova sport') || s.includes('oneplay');
+        }
+
+        // ── 4. Rendering ─────────────────────────────────────────────────────
+        function getFilteredChannels() {
+            if (!searchTerm) return sportChannels;
+            var term = searchTerm.toLowerCase().trim();
+            return sportChannels.filter(function(ch) {
+                return ch.name.toLowerCase().includes(term);
+            });
+        }
+
+        function renderChannels() {
+            grid.innerHTML = '';
+            var filtered = getFilteredChannels();
+
+            channelCountText.textContent = filtered.length + (filtered.length === 1 ? ' sportovní kanál' : (filtered.length < 5 ? ' sportovní kanály' : ' sportovních kanálů'));
+
+            if (filtered.length === 0) {
+                grid.innerHTML = '<div class="empty-state"><i class="fas fa-futbol"></i>Žádný sportovní kanál nenalezen</div>';
+                return;
+            }
+
+            filtered.forEach(function(channel, index) {
+                var card = document.createElement('div');
+                card.className = 'channel-card';
+                card.setAttribute('tabindex', '0');
+                card.setAttribute('role', 'button');
+                card.setAttribute('aria-label', channel.name);
+                card.innerHTML = '<img src="' + (channel.icon || '') + '" class="channel-logo" alt="' + channel.name + '" loading="lazy" decoding="async">' +
+                                 '<div class="channel-name">' + channel.name + '</div>';
+
+                card.addEventListener('click', function() {
+                    playChannel(channel, card);
+                });
+
+                grid.appendChild(card);
+            });
+        }
+
+        // ── 5. Clearance Token Helper ────────────────────────────────────────
+        function getClearanceToken() {
+            var token = window.__cf_clearance_token || '';
+            if (!token) {
+                try { token = sessionStorage.getItem("cf_clearance_token") || localStorage.getItem("cf_clearance_token") || ""; } catch(e) {}
+            }
+            return token;
+        }
+
+        function isClearanceTarget(url) {
+            if (!url || typeof url !== "string") return false;
+            if (url.includes("opg.yasuoyone.org") || url.includes("cetin.cz") || url.includes("mazana.tv") || url.includes("aw-ucdn") || url.includes(".m3u8") || url.includes(".mpd") || url.includes(".ts")) {
+                return false;
+            }
+            return url.includes("e.yasuoyone.org") || url.includes("oepg.yasuoyone.org") || url.includes("epg.yasuoyone.org");
+        }
+
+        // ── 6. Player Initializers ───────────────────────────────────────────
+        async function unloadPlayer() {
+            if (typeof TizenAVPlay !== 'undefined') {
+                try { TizenAVPlay.stop(); } catch(e) {}
+            }
+            if (shakaPlayer) {
+                try { await shakaPlayer.unload(); } catch(e) {}
+                try { await shakaPlayer.detach(); } catch(e) {}
+            }
+            videoElem.pause();
+            videoElem.removeAttribute('src');
+            videoElem.removeAttribute('poster');
+            videoElem.load();
+        }
+
+        async function initShakaOnce() {
+            if (shakaPlayer) return shakaPlayer;
+            if (!shaka.Player.isBrowserSupported()) {
+                console.warn('Shaka is not supported in this environment');
+                return null;
+            }
+
+            var ui = videoElem['ui'];
+            if (!ui) {
+                shakaPlayer = new shaka.Player(videoElem);
+                ui = new shaka.ui.Overlay(shakaPlayer, shakaContainer, videoElem);
+            }
+
+            ui.configure({
+                doubleClickForFullscreen: false,
+                fadeDelay: 5,
+                bigButtons: [],
+                controlPanelElements: [
+                    'play_pause',
+                    'time_and_duration',
+                    'mute',
+                    'volume',
+                    'spacer',
+                    'overflow_menu',
+                    'fullscreen'
+                ],
+                overflowMenuButtons: [
+                    'quality',
+                    'language',
+                    'captions',
+                    'playback_rate'
+                ],
+                addSeekBar: true
+            });
+
+            shakaControls = ui.getControls();
+            shakaPlayer = shakaControls.getPlayer();
+
+            shakaPlayer.configure({
+                streaming: {
+                    safeSeekOffset: 7,
+                    bufferingGoal: 10,
+                    rebufferingGoal: 2
+                },
+                manifest: {
+                    dash: { ignoreMinBufferTime: true, autoCorrectDrift: true }
+                }
+            });
+
+            shakaPlayer.getNetworkingEngine().registerRequestFilter(function(type, request) {
+                try {
+                    if (request && request.uris) {
+                        var isYasuoyone = request.uris.some(function(u) {
+                            return typeof u === "string" && (u.includes(".yasuoyone.org") || u.includes("yasuoyone.org"));
+                        });
+                        if (isYasuoyone) {
+                            request.headers = request.headers || {};
+                            request.headers['Origin'] = 'https://yasuoyone.org';
+                            request.headers['Referer'] = 'https://yasuoyone.org/';
+                        } else if (request.uris.some(function(u) { return typeof u === "string" && (u.includes("cetin.cz") || u.includes("mazana.tv") || u.includes("aw-ucdn")); })) {
+                            if (request.headers) {
+                                delete request.headers['Referer'];
+                                delete request.headers['Origin'];
+                            }
+                        }
+                    }
+                    var token = getClearanceToken();
+                    if (token && request && request.uris) {
+                        for (var i = 0; i < request.uris.length; i++) {
+                            if (isClearanceTarget(request.uris[i])) {
+                                request.headers['X-Clearance-Token'] = token;
+                            }
+                        }
+                    }
+                } catch (e) {}
+            });
+
+            return shakaPlayer;
+        }
+
+        // ── 7. Play Channel Logic ────────────────────────────────────────────
+        async function playChannel(channel, cardElem) {
+            if (cardElem) lastActiveCard = cardElem;
+            currentChannelObj = channel;
+            var loadId = ++currentLoadId;
+
+            playerChannelNameSpan.textContent = channel.name;
+            playerOverlay.classList.add('active');
+            showControls();
+            document.body.style.overflow = 'hidden';
+
+            if (currentAudioElement) {
+                currentAudioElement.pause();
+                currentAudioElement.removeAttribute('src');
+                currentAudioElement.load();
+                currentAudioElement = null;
+            }
+            audioFallbackDiv.style.display = 'none';
+            shakaContainer.style.display = 'block';
+
+            await unloadPlayer();
+            if (loadId !== currentLoadId) return;
+
+            var isRadio = channel.name.toLowerCase().includes('radio') || channel.name.toLowerCase().includes('fm');
+
+            try {
+                // Fetch stream URL pointer
+                var res = await fetch('https://e.yasuoyone.org/api/get-stream?id=' + encodeURIComponent(channel.name));
+                if (loadId !== currentLoadId) return;
+                var data = await res.json();
+                if (!data.stream) throw new Error('Stream URL pointer missing');
+
+                // Resolve real stream URL
+                var streamRes = await fetch('https://e.yasuoyone.org' + data.stream);
+                if (loadId !== currentLoadId) return;
+                var streamUrl = (await streamRes.text()).trim();
+
+                if (isRadio) throw new Error('audio_fallback');
+
+                // Sanitize URL
+                var cleanUrl = streamUrl.replace(/([?&])(cf_clearance|clearance)=[^&]*/g, '').replace(/\?&/, '?').replace(/&&+/, '&').replace(/[?&]$/, '');
+
+                // Priority 1: Hardware Samsung AVPlay
+                if (typeof TizenAVPlay !== 'undefined' && TizenAVPlay.isAvailable()) {
+                    console.log('[Sport TV] Playing via Samsung AVPlay:', cleanUrl);
+                    playerEngineLabel.textContent = 'Samsung AVPlay';
+                    shakaContainer.style.display = 'block';
+                    videoElem.style.display = 'none';
+
+                    TizenAVPlay.play(cleanUrl, {
+                        containerEl: shakaContainer,
+                        onPlaying: function() {
+                            console.log('[Sport TV] AVPlay playback started');
+                        },
+                        onError: function(errType) {
+                            console.warn('[Sport TV] AVPlay failed, fallback to Shaka:', errType);
+                            try { TizenAVPlay.stop(); } catch(e){}
+                            videoElem.style.display = '';
+                            playerEngineLabel.textContent = 'Shaka Player';
+                            initShakaOnce().then(function(sp) {
+                                if (sp) {
+                                    sp.load(cleanUrl).then(function() {
+                                        videoElem.play().catch(function() {});
+                                    }).catch(function(sErr) {
+                                        console.error('Shaka fallback also failed:', sErr);
+                                    });
+                                }
+                            });
+                        }
+                    });
+                    return;
+                }
+
+                // Priority 2: Shaka Player (MSE + mux.js)
+                playerEngineLabel.textContent = 'Shaka Player';
+                videoElem.style.display = '';
+                await initShakaOnce();
+                if (loadId !== currentLoadId) return;
+
+                console.log('[Sport TV] Loading into Shaka Player:', cleanUrl);
+                await shakaPlayer.load(cleanUrl);
+
+                if (loadId !== currentLoadId) return;
+
+                try {
+                    await videoElem.play();
+                } catch (playErr) {
+                    videoElem.muted = true;
+                    await videoElem.play();
+                }
+
+            } catch (err) {
+                console.warn('[Sport TV] Video playback fallback triggered:', err);
+                if (loadId !== currentLoadId) return;
+
+                // Audio stream fallback (e.g. ČRo Radiožurnál Sport)
+                shakaContainer.style.display = 'none';
+                audioFallbackDiv.style.display = 'flex';
+                playerEngineLabel.textContent = 'Audio Stream';
+
+                var audioElem = audioFallbackDiv.querySelector('audio');
+                audioElem.removeAttribute('src');
+                audioElem.load();
+
+                try {
+                    var aRes = await fetch('https://e.yasuoyone.org/api/get-stream?id=' + encodeURIComponent(channel.name));
+                    if (loadId !== currentLoadId) return;
+                    var aData = await aRes.json();
+                    if (aData.stream) {
+                        var aStreamRes = await fetch('https://e.yasuoyone.org' + aData.stream);
+                        if (loadId !== currentLoadId) return;
+                        var audioUrl = (await aStreamRes.text()).trim();
+                        audioElem.src = audioUrl;
+                        currentAudioElement = audioElem;
+                        await audioElem.play();
+                    } else {
+                        throw new Error('No audio link');
+                    }
+                } catch (audioErr) {
+                    if (loadId !== currentLoadId) return;
+                    audioFallbackDiv.innerHTML = '<div style="color:#ff6b6b; font-size:1.2rem;"><i class="fas fa-exclamation-triangle"></i> Stream není momentálně dostupný</div>';
+                }
+            }
+        }
+
+        // ── 8. Close Player (Back to Channel Grid) ───────────────────────────
+        async function closePlayer() {
+            currentLoadId++;
+            if (typeof TizenAVPlay !== 'undefined') {
+                try { TizenAVPlay.stop(); } catch(e) {}
+            }
+            playerOverlay.classList.remove('active');
+            playerOverlay.classList.remove('controls-hidden');
+            if (controlsTimeout) clearTimeout(controlsTimeout);
+            document.body.style.overflow = '';
+
+            if (currentAudioElement) {
+                currentAudioElement.pause();
+                currentAudioElement.removeAttribute('src');
+                currentAudioElement.load();
+                currentAudioElement = null;
+            }
+
+            await unloadPlayer();
+            audioFallbackDiv.style.display = 'none';
+            shakaContainer.style.display = 'block';
+            currentChannelObj = null;
+
+            // Restore focus to last active card
+            if (lastActiveCard && typeof lastActiveCard.focus === 'function') {
+                try { lastActiveCard.focus(); } catch (e) {}
+            }
+        }
+        window.closePlayer = closePlayer;
+
+        // ── 9. Player Controls Fade-out & Remote Steering ─────────────────────
+        function showControls(focusTarget) {
+            playerOverlay.classList.remove('controls-hidden');
+            clearTimeout(controlsTimeout);
+            if (shakaControls && typeof shakaControls.showControls === 'function') {
+                shakaControls.showControls();
+            }
+            if (playerOverlay.classList.contains('active') && audioFallbackDiv.style.display !== 'flex') {
+                controlsTimeout = setTimeout(hideControls, 5000);
+            }
+            if (focusTarget && typeof focusTarget.focus === 'function') {
+                try { focusTarget.focus(); } catch (e) {}
+            }
+        }
+
+        function hideControls() {
+            if (playerOverlay.classList.contains('active') && audioFallbackDiv.style.display !== 'flex') {
+                playerOverlay.classList.add('controls-hidden');
+            }
+        }
+
+        playerOverlay.addEventListener('mousemove', function() { showControls(); });
+        playerOverlay.addEventListener('touchstart', function() { showControls(); }, { passive: true });
+        closePlayerBtn.addEventListener('click', closePlayer);
+
+        // TV Remote keydown during playback
+        window.addEventListener('keydown', function(e) {
+            var code = e.keyCode || e.which;
+            var isBack = code === 10009 || code === 27 || code === 4 || e.key === 'Escape' || e.key === 'Back' || e.key === 'XF86Back';
+
+            if (playerOverlay.classList.contains('active')) {
+                // Back key cleanly closes the player
+                if (isBack) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    closePlayer();
+                    return;
+                }
+
+                // Media Play / Pause (Space, PlayPause keys: 32, 179, 10252, 415, 19)
+                if (code === 32 || code === 179 || code === 10252 || code === 415 || code === 19) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (typeof TizenAVPlay !== 'undefined' && TizenAVPlay.isAvailable() && TizenAVPlay.getCurrentUrl()) {
+                        TizenAVPlay.togglePlayPause();
+                    } else if (videoElem) {
+                        if (videoElem.paused) videoElem.play().catch(function(){});
+                        else videoElem.pause();
+                    }
+                    showControls();
+                    return;
+                }
+
+                // Any key wakes up controls if hidden
+                var isHidden = playerOverlay.classList.contains('controls-hidden');
+                if (isHidden) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    showControls(closePlayerBtn);
+                    return;
+                } else {
+                    showControls();
+                }
+
+                // Up arrow: moves focus to top Close Button
+                if (code === 38) {
+                    if (shakaContainer && shakaContainer.contains(document.activeElement)) {
+                        if (!document.activeElement.closest('.shaka-overflow-menu, .shaka-settings-menu')) {
+                            e.preventDefault();
+                            closePlayerBtn.focus();
+                            return;
+                        }
+                    }
+                }
+                // Down arrow: moves focus into Shaka player controls
+                if (code === 40) {
+                    if (document.activeElement === closePlayerBtn) {
+                        var shakaBtn = shakaContainer ? shakaContainer.querySelector('.shaka-play-pause-btn, .shaka-overflow-menu-button, .shaka-controls-container button') : null;
+                        if (shakaBtn) {
+                            e.preventDefault();
+                            shakaBtn.focus();
+                            return;
+                        }
+                    }
+                }
+            }
+        });
+
+        // Search input handling
+        searchInput.addEventListener('input', function(e) {
+            searchTerm = e.target.value;
+            renderChannels();
+        });
+
+        // ── 10. Startup: 0ms Render & Auto-focus ─────────────────────────────
+        renderChannels();
+
+        setTimeout(function() {
+            var firstCard = grid.querySelector('.channel-card');
+            if (firstCard) {
+                firstCard.focus();
+            }
+        }, 150);
+
+        // ── 11. Dynamic Channels Refresh in Background ────────────────────────
+        function loadDynamicChannels() {
+            function loadScript(src, cb) {
+                var s = document.createElement('script');
+                s.src = src;
+                s.async = false;
+                if (cb) s.onload = cb;
+                document.head.appendChild(s);
+            }
+
+            var clr = getClearanceToken();
+            var q = clr ? ("?cf_clearance=" + encodeURIComponent(clr)) : "";
+
+            loadScript("https://e.yasuoyone.org/category.js" + q, function() {
+                loadScript("https://e.yasuoyone.org/channels.js" + q, function() {
+                    if (window.channels && window.channels.length) {
+                        var fetchedSport = window.channels.filter(function(ch) {
+                            return !ch.name.toLowerCase().includes('mozaika') && isSportChannel(ch.name);
+                        });
+
+                        if (fetchedSport.length > 0) {
+                            sportChannels = fetchedSport;
+                            renderChannels();
+                            console.log('[Sport TV] Channels updated dynamically. Count:', sportChannels.length);
+                        }
+                    }
+                });
+            });
+        }
+
+        // Trigger dynamic refresh after initial UI is interactive
+        setTimeout(loadDynamicChannels, 800);
+
+    })();
+    </script>
+</body>
+</html>

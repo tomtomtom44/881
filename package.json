@@ -1,0 +1,22 @@
+{
+  "name": "tizenbrew-sport",
+  "version": "1.0.0",
+  "description": "Sport TV module for TizenBrew on Samsung Smart TV",
+  "main": "index.html",
+  "serviceFile": "service.js",
+  "packageType": "app",
+  "appName": "Sport TV",
+  "appPath": "index.html",
+  "icon": "icon.png",
+  "evaluateScriptOnDocumentStart": false,
+  "keys": [
+    "MediaPlay",
+    "MediaPause",
+    "MediaPlayPause",
+    "MediaStop",
+    "MediaFastForward",
+    "MediaRewind"
+  ],
+  "author": "Yasuoyone",
+  "license": "MIT"
+}
